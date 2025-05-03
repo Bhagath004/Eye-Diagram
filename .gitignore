@@ -1,174 +1,106 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# UV
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#uv.lock
-
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
-
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#pdm.lock
-#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
-#   in version control.
-#   https://pdm.fming.dev/latest/usage/project/#working-with-version-control
-.pdm.toml
-.pdm-python
-.pdm-build/
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
-
-# Ruff stuff:
-.ruff_cache/
-
-# PyPI configuration file
-.pypirc
+import numpy as np
+import matplotlib.pyplot as plt
+def generate_MPAM_signal(M,N):
+    levels=np.arange(-(M-1),M,2) #Generate the amplitude levels
+    d=np.random.choice(levels,size=N) #Generate the signal
+    return d,levels
+def upsample_signal(d,L,N): #Upsample the signal
+    v=np.zeros(N*L)
+    v[::L]=d
+    return v
+def generate_srrc(beta,Ts,Nsym,L,t): #Generate the square root raised cosine pulse
+    p=np.zeros_like(t)
+    for i in range(len(t)):
+        if t[i]==0:
+           p[i]=(1/Ts)*(1+beta*((4/np.pi)-1))
+        elif abs(t[i])==Ts/(4*beta):
+           p[i]=(beta/(Ts*np.sqrt(2)))*(((1+2/np.pi)*np.sin(np.pi/(4
+        else:
+           p[i]=(1/Ts)*((np.sin(np.pi*t[i]/Ts*(1-beta)))+(4*beta*t[i
+    # Normalize the pulse shape energy to unity
+    k=np.sqrt(np.sum(p**2)) #rms value
+    p=p/k #normalisation
+    return p
+def awgn(s,M,L):
+    sp=L*np.sum(np.abs(s)**2)/len(s) #signal power
+    snr=10*np.log10(np.log2(M))+15 #SNR per symbol
+    npsd=sp/(2*10**(snr/10)) #noise power spectral density
+    n=np.random.normal(0,np.sqrt(npsd),len(s))
+    return n
+def matched_filter(p,offsetrange,symbols,M,Nsym,L,v,d):
+    D=int(Nsym*L/2)
+    s=np.convolve(v,p) # Convolve the upsampled input stream 'v' with the shaping pulse 'p
+    ser=[]
+    for i in offsetrange:
+        r=v+awgn(v,M,L)
+        h=p[::-1]
+        s_hat=np.convolve(r,h)
+        v_hat=s_hat[2*D+i:len(s_hat)-2*D+i:L]
+        dist=np.abs(v_hat.reshape(-1,1)-symbols.reshape(1,-1))
+        temp=np.argmin(dist,axis=1)
+        d_hat = symbols[temp]
+        ser.append(np.sum(d!=d_hat)/len(d))
+    return s,s_hat,ser
+def transmission_filter(p,v):
+    s=np.convolve(v,p) # Convolve the upsampled input stream 'v' with the shaping pulse 'p
+    return s
+def plotEyeDiagram(beta,s, L, offset,t,x):
+    traces = np.reshape(s[offset:t*L- offset],(-1,L)).transpose()
+    plt.plot(traces)
+    plt.xlabel('Time [samples]')
+    plt.ylabel('Amplitude')
+    plt.title(f'Eye Diagram {x} for M={i}, Î²={beta}, EbN0dB= 15dB')
+def receive_srrc(beta,Ts,Nsym,L,t): 
+    p=np.zeros_like(t)
+    for i in range(len(t)):
+        if t[i]==0:
+           p[i]=(1/Ts)*(1+beta*((4/np.pi)-1))
+        elif abs(t[i])==Ts/(4*beta):
+           p[i]=(beta/(Ts*np.sqrt(2)))*(((1+2/np.pi)*np.sin(np.pi/(4
+        else:
+           p[i]=(1/Ts)*((np.sin(np.pi*t[i]/Ts*(1-beta)))+(4*beta*t[i])
+    k=np.sqrt(np.sum(p**2)) 
+    p=p/k 
+    return p
+def eyeplot(M):
+    N=10**5
+    d,symbols=generate_MPAM_signal(M, N)
+    L=8
+    v=upsample_signal(d, L,N)
+    beta_values=[0.3,0.5,0.8]
+    Ts=1
+    Nsym=8
+    t=np.linspace(-Nsym/2,Nsym/2,Nsym*L+1) 
+    num2=0
+    for beta in beta_values:
+        num2+=1
+        p=generate_srrc(beta,Ts,Nsym,L,t)
+        q=receive_srrc(beta,Ts,Nsym,L,t)
+        offsetrange=np.arange(-4,5)
+        z=transmission_filter(p,v)
+        s,s_hat,ser=matched_filter(q,offsetrange,symbols,i, Nsym, L,z
+        if beta==0.3:
+           print(ser)
+        plt.subplot(3,3,num2)
+        plotEyeDiagram(beta,s_hat, 2*L, offset=int(Nsym*(L)), t=100,x
+        plt.tight_layout()
+        plt.subplot(3,3,(num2+3))
+        plotEyeDiagram(beta,s, 2*L, offset=int(Nsym*(L)),t=100,x='without noise'
+        plt.tight_layout()
+        plt.subplot(3,3,(num2+6))
+        plt.plot(offsetrange,ser, 'bo-', linewidth=2, markersize=8)
+        plt.grid(True)
+        plt.title(f'SER vs offset for M={i}, Î²={beta}, EbN0dB=15dB')
+        plt.xlabel("offset(in dB)")
+        plt.ylabel('Symbol Error Rate')
+        plt.tight_layout()
+        min_SER_indices = np.where(ser == np.min(ser))[0]
+        best_intervals = offsetrange[min_SER_indices]
+        print(f"For M = {M}, beta = {beta}, EbN0dB = 15:")
+        print(f"Possible time intervals for sampling received signal: 
+        print(f"SER values for each time interval: {ser}")
+        print(f"The best time intervals for sampling the received signal are:
+    plt.show()
+M=[2,4]
+for i in M:
+    eyeplot(i)
